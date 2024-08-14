@@ -1,3 +1,4 @@
+//https://www.postgresql.org/support/versioning/
 import puppeteer from "puppeteer";
 import fs from "fs";
 import path from "path";
@@ -34,9 +35,7 @@ async function getDataFromWebPage() {
             return null;
         }
     });
-     // if (data) {
-    //     console.log(data)
-    // }
+
     let fullPgrScript = "USE VersionsControl;\n\n";
 
     fullPgrScript += `IF NOT EXISTS(SELECT * FROM sysobjects where name = 'versionesPGR' and xtype = 'U' )
@@ -46,24 +45,28 @@ async function getDataFromWebPage() {
         file_version VARCHAR(255),
         supported VARCHAR(5),
         first_Release date,
-        final_Release date,
+        final_Release date
     );
     END;\n\n`;
 
     for (const row of data) {
+        //metodo para formatear en idioma ingles.
+        const formattedFirstRelease = formatDate(row.firstRelease);
+        const formattedFinalRelease = formatDate(row.finalRelease);
+
         fullPgrScript += `IF NOT EXISTS (SELECT * FROM versionesPGR WHERE file_version = '${row.currentMinor}')
         BEGIN
             INSERT INTO versionesPGR(version, file_version, supported, first_Release, final_Release)
-            VALUES ('${row.version}', '${row.currentMinor}', '${row.supported}' , '${row.firstRelease}', '${row.finalRelease}');
+            VALUES ('${row.version}', '${row.currentMinor}', '${row.supported}', '${formattedFirstRelease}', '${formattedFinalRelease}');
         END
         ELSE
         BEGIN
             UPDATE versionesPGR
-            SET version = '${row.version}'
+            SET version = '${row.version}',
                 file_version = '${row.currentMinor}',
                 supported = '${row.supported}',
-                first_Release = '${row.firstRelease}',
-                final_Release = '${row.finalRelease}'
+                first_Release = '${formattedFirstRelease}',
+                final_Release = '${formattedFinalRelease}'
             WHERE file_version = '${row.currentMinor}';
         END;\n\n`;
     }
@@ -71,9 +74,17 @@ async function getDataFromWebPage() {
     const filePath = path.join('versions', 'PGR.sql');
     fs.writeFileSync(filePath, fullPgrScript);
     console.log(`Script generado exitosamente y guardado en: ${filePath}`);
-    
 
     await browser.close();
+}
+
+function formatDate(dateString) {
+    if (dateString === 'TBA') return dateString;
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${year}-${month}-${day}`;
 }
 
 getDataFromWebPage();

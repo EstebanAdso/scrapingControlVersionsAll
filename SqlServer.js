@@ -1,3 +1,4 @@
+// https://www.sqlserverversions.com/#sql2022x
 import puppeteer from "puppeteer";
 import fs from "fs"; // Importar el módulo de sistema de archivos
 import path from "path";
@@ -5,7 +6,7 @@ import path from "path";
 async function getDataFromWebPage() {
     const browser = await puppeteer.launch({
         headless: false,
-        slowMo: 400
+        slowMo: 100
     });
     const page = await browser.newPage();
     await page.goto('https://www.sqlserverversions.com/');
@@ -66,9 +67,9 @@ async function getDataFromWebPage() {
 
     await browser.close();
 
-let fullSqlScript = "USE VersionsControl;\n\n";
+    let fullSqlScript = "USE VersionsControl;\n\n";
 
-fullSqlScript += `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='versionesSql' AND xtype='U')
+    fullSqlScript += `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='versionesSql' AND xtype='U')
         BEGIN
         CREATE TABLE versionesSql (
             anio VARCHAR(4),
@@ -79,12 +80,13 @@ fullSqlScript += `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='versionesS
         );
         END;\n\n`;
 
-            for (const [versionYear, results] of Object.entries(data)) {
-                results.forEach(row => {
-                    fullSqlScript += `IF NOT EXISTS (SELECT * FROM versionesSql WHERE build = '${row.build}')
+    for (const [versionYear, results] of Object.entries(data)) {
+        results.forEach(row => {
+            const formattedDate = formatDate(row.releaseDate);
+            fullSqlScript += `IF NOT EXISTS (SELECT * FROM versionesSql WHERE build = '${row.build}')
         BEGIN
             INSERT INTO versionesSql (anio, build, file_version, description, release_date)
-            VALUES ('${versionYear}', '${row.build}', '${row.fileVersion}', '${row.kbDescription}', '${row.releaseDate}');
+            VALUES ('${versionYear}', '${row.build}', '${row.fileVersion}', '${row.kbDescription}', '${formattedDate}');
         END
         ELSE
         BEGIN
@@ -92,16 +94,22 @@ fullSqlScript += `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='versionesS
             SET anio = '${versionYear}',
                 file_version = '${row.fileVersion}',
                 description = '${row.kbDescription}',
-                release_date = '${row.releaseDate}'
+                release_date = '${formattedDate}'
             WHERE build = '${row.build}';
         END;\n\n`;
-                });
-            }
+        });
+    }
 
     // Guardar el script SQL completo en un archivo
     const filePath = path.join('versions', 'SQL.sql');
     fs.writeFileSync(filePath, fullSqlScript);
     console.log(`Script generado exitosamente y guardado en: ${filePath}`);
+}
+
+function formatDate(dateString) {
+    if (!dateString) return null;
+    const [year, month, day] = dateString.split('-');
+    return `${year}-${month}-${day}`;
 }
 
 getDataFromWebPage();

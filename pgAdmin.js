@@ -25,22 +25,21 @@ async function getDataFromWebPage() {
             });
 
             const versions = filteredHeaders.map(a => {
-                const match = a.innerText.match(/ - (.*)$/);
-                return match ? match[1] : null; // Devuelve la versión o null si no encuentra una coincidencia
+                const match = a.innerText.match(/v\d+\.\d+/);
+                return match ? match[0] : null; // Devuelve solo la versión o null si no encuentra una coincidencia
             });
 
             const length = Math.min(versions.length, dates.length);
-            const pairedData =[];
+            const pairedData = [];
 
-            for (let i=0 ; i< length; i++){
+            for (let i = 0; i < length; i++) {
                 pairedData.push({
-                    header:versions[i],
-                    date : dates[i]
+                    header: versions[i],
+                    date: dates[i]
                 })
             }
 
-            return {pairedData};
-
+            return { pairedData };
         } catch (error) {
             console.error('Error en la navegación de la página:', error);
             return null;
@@ -59,16 +58,17 @@ async function getDataFromWebPage() {
     END;\n\n`;
 
     for (const row of data.pairedData) {
+        const formattedDate = formatDate(row.date);
         fullPgAdminScript += `IF NOT EXISTS (SELECT * FROM versionesPgAdmin WHERE file_version = '${row.header}')
         BEGIN
             INSERT INTO versionesPgAdmin(file_version, release_date)
-            VALUES ('${row.header}', '${row.date}');
+            VALUES ('${row.header}', '${formattedDate}');
         END
         ELSE
         BEGIN
             UPDATE versionesPgAdmin
             SET file_version = '${row.header}',
-                release_date = '${row.date}'
+                release_date = '${formattedDate}'
             WHERE file_version = '${row.header}';
         END;\n\n`;
     }
@@ -78,7 +78,12 @@ async function getDataFromWebPage() {
     console.log(`Script generado exitosamente y guardado en: ${filePath}`);
 
     await browser.close();
-    
+}
+
+function formatDate(dateString) {
+    if (!dateString) return null;
+    const [year, month, day] = dateString.split('-');
+    return `${year}-${month}-${day}`;
 }
 
 getDataFromWebPage();

@@ -1,3 +1,4 @@
+// https://learn.microsoft.com/en-us/sql/ssms/release-notes-ssms?view=sql-server-ver16
 import puppeteer from "puppeteer";
 import fs  from "fs";
 import path from "path";
@@ -9,22 +10,21 @@ async function getDataFromWebPage(){
     })
 
     const page = await browser.newPage();
-    await page.goto('https://learn.microsoft.com/es-es/sql/ssms/release-notes-ssms?view=sql-server-ver16#previous-ssms-releases');
+    await page.goto('https://learn.microsoft.com/en-us/sql/ssms/release-notes-ssms?view=sql-server-ver16');
 
     const data = await page.evaluate(() =>{
         try{
             const headers = document.querySelectorAll('.content ul li');
 
             const versions = Array.from(headers)
-                .filter(li => li.innerText.includes('Número de versión:'))
-                .map(li => li.innerText);
+                .filter(li => li.innerText.includes('Release number:'))
+                .map(li => li.innerText.split(':')[1].trim());
                 const compilacion = Array.from(headers)
-                .filter(li => li.innerText.includes('Número de compilación:'))
-                .map(li => li.innerText);
+                .filter(li => li.innerText.includes('Build number: '))
+                .map(li => li.innerText.split(':')[1].trim());
                 const fecha = Array.from(headers)
-                .filter(li => li.innerText.includes('Fecha de publicación:') || li.innerText.includes('Fecha de lanzamiento:'))
-
-                .map(li => li.innerText)
+                .filter(li => li.innerText.includes('Release date:') || li.innerText.includes('Fecha de lanzamiento:'))
+                .map(li => li.innerText.split(':')[1].trim());
                 
             const length = Math.min(versions.length);
             const pairedData = [];
@@ -57,17 +57,20 @@ async function getDataFromWebPage(){
     END;\n\n`;
 
     for (const row of data.pairedData) {
+        //metodo para formatear fechas en idioma ingles
+        const formattedFirstRelease = formatDate(row.date)
+
         fullSSMSscript += `IF NOT EXISTS (SELECT * FROM versionesSSMS WHERE file_version = '${row.version}')
         BEGIN
             INSERT INTO versionesSSMS(file_version, compilation, release_date)
-            VALUES ('${row.version}', '${row.compi}', '${row.date}');
+            VALUES ('${row.version}', '${row.compi}', '${formattedFirstRelease}');
         END
         ELSE
         BEGIN
             UPDATE versionesSSMS
             SET file_version = '${row.version}',
                 compilation = '${row.compi}',
-                release_date = '${row.date}'
+                release_date = '${formattedFirstRelease}'
             WHERE file_version = '${row.version}';
         END;\n\n`;
     }
@@ -80,5 +83,13 @@ async function getDataFromWebPage(){
     await browser.close();
 }
 
+function formatDate(dateString) {
+    if (dateString === 'TBA') return dateString;
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${year}-${month}-${day}`;
+}
 
 getDataFromWebPage();
