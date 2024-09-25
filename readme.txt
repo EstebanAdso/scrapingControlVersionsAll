@@ -3,6 +3,8 @@ npm i puppeteer -- para instalar puppeteer
 npm i express --para instalar express
 En el package.json usar "type": "module",
 npm install -- en caso de instalar todas las dependencias de esta forma
+npm install mssql
+
 
 
 Puppeteer
