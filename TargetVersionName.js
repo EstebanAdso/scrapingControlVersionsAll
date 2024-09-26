@@ -10,27 +10,32 @@ const sqlConfig = {
     options: { encrypt: false, trustServerCertificate: true }
 };
 
+//Funcion para formatear fechas
 const formatDate = (dateString) => {
     const date = new Date(dateString);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
-async function insertOrUpdateVersion(pool, targetId, targetVersionName, urlGetInfo, lastVersion, lastVersionDate) {
+
+//Funcion para insertar o actualizar utilizando un procedimiento de sql
+async function insertOrUpdateVersion(pool, targetId, BatchFileName, LastVersion, LastVersionDate, VersionDescription) {
     await pool.request()
         .input('targetId', sql.VarChar, targetId)
-        .input('targetVersionName', sql.VarChar, targetVersionName)
-        .input('urlGetInfo', sql.VarChar, urlGetInfo)
-        .input('lastVersion', sql.VarChar, lastVersion)
-        .input('lastVersionDate', sql.Date, lastVersionDate)
-        .execute('InsertOrUpdateVersion');
+        .input('BatchFileName', sql.VarChar, BatchFileName)
+        .input('LastVersion', sql.VarChar, LastVersion)
+        .input('LastVersionDate', sql.Date, LastVersionDate)
+        .input('VersionDescription', sql.VarChar, VersionDescription)
+        .execute('mnt.insertorupdateversion');
 }
 
+//Funcion para Scrapear paginas
 async function scrapePage(browser, url, evaluateFunction) {
     const page = await browser.newPage();
     await page.goto(url);
     return await page.evaluate(evaluateFunction);
 }
 
+//Funcion Principal
 async function getDataFromWebPage() {
     const pool = await sql.connect(sqlConfig);
     const browser = await puppeteer.launch({ headless: false, slowMo: 20 });
@@ -56,7 +61,7 @@ async function getDataFromWebPage() {
             },
             process: async (data) => {
                 if (data.version && data.date) {
-                    await insertOrUpdateVersion(pool, 'ALD2', 'AirLiveDrive', 'https://www.airlivedrive.com/en/download/', data.version, formatDate(data.date));
+                    await insertOrUpdateVersion(pool, 'ALD2', 'Procedure', data.version, formatDate(data.date));
                 }
             }
         },
@@ -77,7 +82,7 @@ async function getDataFromWebPage() {
             },
             process: async (data) => {
                 if (data && data.version && data.date) {
-                    await insertOrUpdateVersion(pool, 'PGA', 'pgAdmin', 'https://www.pgadmin.org/news/', data.version, formatDate(data.date));
+                    await insertOrUpdateVersion(pool, 'PGA', 'Procedure', data.version, formatDate(data.date));
                 }
             }
         },
@@ -100,7 +105,7 @@ async function getDataFromWebPage() {
             },
             process: async (data) => {
                 if (data) {
-                    await insertOrUpdateVersion(pool, 'PGR', 'PostgreSQL', 'https://www.postgresql.org/support/versioning/', data.currentMinor, formatDate(data.finalRelease));
+                    await insertOrUpdateVersion(pool, 'PGR', 'Procedure', data.currentMinor, formatDate(data.finalRelease));
                 }
             }
         },
@@ -113,10 +118,11 @@ async function getDataFromWebPage() {
                 const targetYears = ['2014', '2017'];
                 const targetIds = ['SQL12', 'SQL14'];
                 const softwareVersionNames = ['SQLServer 2014', 'SQLServer 2017'];
-
+        
+                // Iterar sobre las tablas (índices 3 y 5 para 2014 y 2017)
                 tables.forEach((table, index) => {
                     if (index === 3 || index === 5) {
-                        const versionYear = targetYears[index === 3 ? 1 : 0];
+                        const versionYear = targetYears[index === 3 ? 1 : 0]; // 2017 para index 3, 2014 para index 5
                         const rows = table.querySelectorAll('table.tbl tbody tr');
                         for (let row of rows) {
                             const columns = row.querySelectorAll('td');
@@ -124,7 +130,7 @@ async function getDataFromWebPage() {
                                 versionsData[versionYear] = [{
                                     build: columns[0].innerText,
                                     fileVersion: columns[2].innerText,
-                                    kbDescription: columns[5].innerText.replace(/'/g, "''"),
+                                    kbDescription: columns[5].innerText.replace(/'/g, "''"), // Reemplazar comillas simples en kbDescription
                                     releaseDate: columns[6].querySelector('time') ? columns[6].querySelector('time').innerText : columns[6].innerText
                                 }];
                                 break;
@@ -132,6 +138,7 @@ async function getDataFromWebPage() {
                         }
                     }
                 });
+        
                 return { versionsData, targetIds, softwareVersionNames };
             },
             process: async (data) => {
@@ -139,12 +146,14 @@ async function getDataFromWebPage() {
                     const results = data.versionsData[i === 0 ? '2014' : '2017'];
                     if (results && results.length > 0) {
                         for (const row of results) {
-                            await insertOrUpdateVersion(pool, data.targetIds[i], data.softwareVersionNames[i], 'https://www.sqlserverversions.com/', row.build, formatDate(row.releaseDate));
+                            // Ahora insertamos también kbDescription
+                            await insertOrUpdateVersion(pool, data.targetIds[i], 'Procedure', row.build, formatDate(row.releaseDate), row.kbDescription);
                         }
                     }
                 }
             }
-        },
+        }
+        ,
         {
             name: 'SSMS',
             url: 'https://learn.microsoft.com/en-us/sql/ssms/release-notes-ssms?view=sql-server-ver16',
@@ -157,7 +166,7 @@ async function getDataFromWebPage() {
             },
             process: async (data) => {
                 if (data && data.compilacion && data.fecha) {
-                    await insertOrUpdateVersion(pool, 'SSMS', 'SSMS', 'https://learn.microsoft.com/en-us/sql/ssms/release-notes-ssms?view=sql-server-ver16', data.compilacion, formatDate(data.fecha));
+                    await insertOrUpdateVersion(pool, 'SSMS', 'Procedure',  data.compilacion, formatDate(data.fecha));
                 }
             }
         },
